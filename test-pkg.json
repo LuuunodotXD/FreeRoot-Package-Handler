@@ -1,0 +1,8 @@
+{
+  "name": "test-pkg",
+  "version": "1.0.0",
+  "description": "Pacote de teste funcional",
+  "url": "file:///home/lunnoo/.pkgmgr/cache/test-pkg.tar.gz",
+  "size": 10240,
+  "dependencies": []
+}
