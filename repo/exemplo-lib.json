@@ -1,0 +1,13 @@
+{
+  "name": "exemplo-lib",
+  "version": "1.0.0",
+  "description": "Uma biblioteca de exemplo",
+  "url": "https://example.com/exemplo-lib-1.0.0.tar.gz",
+  "size": 102400,
+  "dependencies": [
+    "dep-lib1",
+    "dep-lib2"
+  ],
+  "maintainer": "Seu Nome <email@example.com>",
+  "license": "MIT"
+}
