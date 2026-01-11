@@ -1,0 +1,15 @@
+{
+  "name": "exemplo-lib",
+  "version": "1.0.0",
+  "description": "Uma biblioteca de exemplo",
+  "url": "https://raw.githubusercontent.com/seu-usuario/seu-repo/main/pkg/exemplo-lib-1.0.0.tar.gz",
+  "size": 102400,
+  "dependencies": [
+    "dep-lib1",
+    "dep-lib2"
+  ],
+  "maintainer": "Seu Nome <email@example.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/seu-usuario/seu-repo",
+  "checksum": "sha256:abc123..."
+}
