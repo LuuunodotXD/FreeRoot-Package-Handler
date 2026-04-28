@@ -23,10 +23,22 @@ install_pkg() {
 
     . "/tmp/pkginfo_$name"
 
-    # Instala dependências primeiro
-    for dep in $deps; do
+    # salva variáveis antes de entrar nas deps
+    _name="$name"
+    _version="$version"
+    _url="$url"
+    _sha256="$sha256"
+    _deps="$deps"
+
+    for dep in $_deps; do
         is_installed "$dep" || install_pkg "$dep"
     done
+
+    # restaura após as deps (elas sobrescrevem tudo)
+    name="$_name"
+    version="$_version"
+    url="$_url"
+    sha256="$_sha256"
 
     echo "==> Downloading $name-$version...  Do not turn off target!"
     curl -fsSL "$url" -o "$PKG_CACHE/$name-$version.tar.gz"
