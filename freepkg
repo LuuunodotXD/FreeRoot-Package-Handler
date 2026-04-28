@@ -8,27 +8,25 @@ PKG_CACHE="/var/cache/pkgm"
 mkdir -p "$PKG_DB" "$PKG_CACHE"
 
 install_pkg() {
-    _pkgname="$1"
-
-    if is_installed "$_pkgname"; then
-        echo "==> $_pkgname is already installed."
+    if is_installed "$1"; then
+        echo "==> $1 is already installed."
         return 0
     fi
 
-    echo "==> Searching info about $_pkgname..."
-    curl -fsSL "$REPO/$_pkgname/PKGINFO" -o "/tmp/pkginfo_$_pkgname" || {
-        echo "ERROR: package '$_pkgname' not found in repository."
+    echo "==> Searching info about $1..."
+    curl -fsSL "$REPO/$1/PKGINFO" -o "/tmp/pkginfo_$1" || {
+        echo "ERROR: package '$1' not found in repository."
         exit 1
     }
 
-    . "/tmp/pkginfo_$_pkgname"
+    . "/tmp/pkginfo_$1"
 
     for dep in $deps; do
         is_installed "$dep" || install_pkg "$dep"
     done
 
-    # re-lê o PKGINFO original, pois as deps sobrescreveram tudo
-    . "/tmp/pkginfo_$_pkgname"
+    # $1 ainda é "greet" aqui, mesmo após a recursão
+    . "/tmp/pkginfo_$1"
 
     echo "==> Downloading $name-$version...  Do not turn off target!"
     curl -fsSL "$url" -o "$PKG_CACHE/$name-$version.tar.gz"
