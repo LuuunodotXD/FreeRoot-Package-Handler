@@ -67,7 +67,7 @@ case "$1" in
     remove)  remove_pkg  "$2" ;;
     list)    list_installed ;;
     *)
-        echo "pkgm - package manager"
-        echo "Use: pkgm [install|remove|list] <package>"
+        echo "freepkg - freeroot package manager"
+        echo "Use: freepkg [install|remove|list] <package>"
         ;;
 esac
