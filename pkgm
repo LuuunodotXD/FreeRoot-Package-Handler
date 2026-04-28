@@ -1,0 +1,73 @@
+#!/bin/sh
+set -e
+
+REPO="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/packages"
+PKG_DB="/var/lib/pkgm/installed"
+PKG_CACHE="/var/cache/pkgm"
+
+mkdir -p "$PKG_DB" "$PKG_CACHE"
+
+install_pkg() {
+    name="$1"
+
+    if is_installed "$name"; then
+        echo "==> $name is already installed."
+        return 0
+    fi
+
+    echo "==> Searching info about $name..."
+    curl -fsSL "$REPO/$name/PKGINFO" -o "/tmp/pkginfo_$name" || {
+        echo "ERROR: package '$name' not found in repository."
+        exit 1
+    }
+
+    . "/tmp/pkginfo_$name"
+
+    # Instala dependências primeiro
+    for dep in $deps; do
+        is_installed "$dep" || install_pkg "$dep"
+    done
+
+    echo "==> Downloading $name-$version...  Do not turn off target!"
+    curl -fsSL "$url" -o "$PKG_CACHE/$name-$version.tar.gz"
+
+    echo "==> Verifying checksum..."
+    echo "$sha256  $PKG_CACHE/$name-$version.tar.gz" | sha256sum -c - || {
+        echo "ERROR: checksum is invalid. Aborting."
+        exit 1
+    }
+
+    echo "==> Installing $name-$version..."
+    tar -xzf "$PKG_CACHE/$name-$version.tar.gz" -C /
+
+    echo "$name=$version" > "$PKG_DB/$name"
+    echo "==> $name-$version installed sucessfully."
+}
+
+remove_pkg() {
+    name="$1"
+    is_installed "$name" || { echo "==> $name is not installed."; exit 1; }
+    rm -f "$PKG_DB/$name"
+    echo "==> $name removed. (systems archives was not removed in this version)"
+}
+
+is_installed() {
+    [ -f "$PKG_DB/$1" ]
+}
+
+list_installed() {
+    echo "==> Installed packages:"
+    ls "$PKG_DB/" 2>/dev/null | while read -r pkg; do
+        cat "$PKG_DB/$pkg"
+    done
+}
+
+case "$1" in
+    install) install_pkg "$2" ;;
+    remove)  remove_pkg  "$2" ;;
+    list)    list_installed ;;
+    *)
+        echo "pkgm - package manager"
+        echo "Use: pkgm [install|remove|list] <package>"
+        ;;
+esac

@@ -1,0 +1,6 @@
+name="hello"
+version="1.0"
+desc="Programa de teste Hello"
+deps=""
+url="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/packages/hello/amd64/hello-1.0.tar.gz"
+sha256="abc123..."
