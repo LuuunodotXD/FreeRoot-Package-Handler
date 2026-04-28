@@ -8,37 +8,27 @@ PKG_CACHE="/var/cache/pkgm"
 mkdir -p "$PKG_DB" "$PKG_CACHE"
 
 install_pkg() {
-    name="$1"
+    _pkgname="$1"
 
-    if is_installed "$name"; then
-        echo "==> $name is already installed."
+    if is_installed "$_pkgname"; then
+        echo "==> $_pkgname is already installed."
         return 0
     fi
 
-    echo "==> Searching info about $name..."
-    curl -fsSL "$REPO/$name/PKGINFO" -o "/tmp/pkginfo_$name" || {
-        echo "ERROR: package '$name' not found in repository."
+    echo "==> Searching info about $_pkgname..."
+    curl -fsSL "$REPO/$_pkgname/PKGINFO" -o "/tmp/pkginfo_$_pkgname" || {
+        echo "ERROR: package '$_pkgname' not found in repository."
         exit 1
     }
 
-    . "/tmp/pkginfo_$name"
+    . "/tmp/pkginfo_$_pkgname"
 
-    # salva variáveis antes de entrar nas deps
-    _name="$name"
-    _version="$version"
-    _url="$url"
-    _sha256="$sha256"
-    _deps="$deps"
-
-    for dep in $_deps; do
+    for dep in $deps; do
         is_installed "$dep" || install_pkg "$dep"
     done
 
-    # restaura após as deps (elas sobrescrevem tudo)
-    name="$_name"
-    version="$_version"
-    url="$_url"
-    sha256="$_sha256"
+    # re-lê o PKGINFO original, pois as deps sobrescreveram tudo
+    . "/tmp/pkginfo_$_pkgname"
 
     echo "==> Downloading $name-$version...  Do not turn off target!"
     curl -fsSL "$url" -o "$PKG_CACHE/$name-$version.tar.gz"
