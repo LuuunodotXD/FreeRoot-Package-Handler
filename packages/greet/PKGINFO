@@ -1,6 +1,6 @@
 name="greet"
 version="1.0"
-desc="Teste de dependência"
+desc="Dependency test"
 deps="hello"
 url="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/packages/greet/amd64/greet-1.0.tar.gz"
 sha256="358074b780ff2dbc5f7d5457d73af7a2ce1da4bafa5436240b449edb8a1416d7"
