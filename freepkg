@@ -74,6 +74,9 @@ is_installed() {
 list_installed() {
     echo "==> Installed packages:"
     ls "$PKG_DB/" 2>/dev/null | while read -r pkg; do
+        case "$pkg" in
+            *.files) continue ;;
+        esac
         cat "$PKG_DB/$pkg"
     done
 }
