@@ -25,7 +25,6 @@ install_pkg() {
         is_installed "$dep" || install_pkg "$dep"
     done
 
-    # $1 ainda é "greet" aqui, mesmo após a recursão
     . "/tmp/pkginfo_$1"
 
     echo "==> Downloading $name-$version...  Do not turn off target!"
@@ -40,15 +39,27 @@ install_pkg() {
     echo "==> Installing $name-$version..."
     tar -xzf "$PKG_CACHE/$name-$version.tar.gz" -C /
 
+    # salva manifesto dos arquivos instalados
+    tar -tzf "$PKG_CACHE/$name-$version.tar.gz" > "$PKG_DB/$name.files"
+
     echo "$name=$version" > "$PKG_DB/$name"
     echo "==> $name-$version installed sucessfully."
 }
 
 remove_pkg() {
-    name="$1"
-    is_installed "$name" || { echo "==> $name is not installed."; exit 1; }
-    rm -f "$PKG_DB/$name"
-    echo "==> $name removed. (systems archives was not removed in this version)"
+    is_installed "$1" || { echo "==> $1 is not installed."; exit 1; }
+
+    echo "==> Removing $1..."
+    while read -r file; do
+        # ignora diretórios (terminam em /)
+        case "$file" in
+            */) continue ;;
+        esac
+        rm -f "/$file"
+    done < "$PKG_DB/$1.files"
+
+    rm -f "$PKG_DB/$1" "$PKG_DB/$1.files"
+    echo "==> $1 removed sucessfully."
 }
 
 is_installed() {
