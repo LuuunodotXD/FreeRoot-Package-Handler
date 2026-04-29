@@ -1,0 +1,5 @@
+# formato: nome|versão|descrição|dependências
+calc|1.0|Simple calculator|
+greet|1.0|Dependency test|hello
+hello|1.0|Hello test program|
+hello-c|1.0|Hello test program in C|
