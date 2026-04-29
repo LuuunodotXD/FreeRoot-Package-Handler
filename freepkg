@@ -50,15 +50,20 @@ remove_pkg() {
     is_installed "$1" || { echo "==> $1 is not installed."; exit 1; }
 
     echo "==> Removing $1..."
-    while read -r file; do
-        # ignora diretórios (terminam em /)
-        case "$file" in
-            */) continue ;;
-        esac
-        rm -f "/$file"
-    done < "$PKG_DB/$1.files"
 
-    rm -f "$PKG_DB/$1" "$PKG_DB/$1.files"
+    if [ -f "$PKG_DB/$1.files" ]; then
+        while read -r file; do
+            case "$file" in
+                */) continue ;;
+            esac
+            rm -f "/$file"
+        done < "$PKG_DB/$1.files"
+        rm -f "$PKG_DB/$1.files"
+    else
+        echo "==> WARNING: no file manifest found, only removing from database."
+    fi
+
+    rm -f "$PKG_DB/$1"
     echo "==> $1 removed sucessfully."
 }
 
