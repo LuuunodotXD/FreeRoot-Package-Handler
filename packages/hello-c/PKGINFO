@@ -1,6 +1,6 @@
 name="hello-c"
 version="1.0"
-desc="Program in C Hello"
+desc="Hello test program in C"
 deps="greet"
 url="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/packages/hello-c/amd64/hello-c-1.0.tar.gz"
 sha256="6a14228acfafd7ae023ed7ade97a100f17dbd2cec07621d4e7957b4e35419436"
