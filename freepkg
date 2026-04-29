@@ -2,6 +2,7 @@
 set -e
 
 REPO="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/packages"
+REPO_INDEX="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/db/amd64.index"
 PKG_DB="/var/lib/pkgm/installed"
 PKG_CACHE="/var/cache/pkgm"
 
@@ -67,6 +68,33 @@ remove_pkg() {
     echo "==> $1 removed sucessfully."
 }
 
+search_pkg() {
+    echo "==> Fetching package index..."
+    curl -fsSL "$REPO_INDEX" -o /tmp/freepkg.index || {
+        echo "ERROR: could not fetch package index."
+        exit 1
+    }
+
+    if [ -z "$1" ]; then
+        # sem argumento — lista tudo
+        grep -v "^#" /tmp/freepkg.index | while IFS="|" read -r name version desc deps; do
+            echo "  $name ($version) - $desc"
+        done
+    else
+        # busca pelo termo
+        result=$(grep -i "^$1|" /tmp/freepkg.index)
+        if [ -z "$result" ]; then
+            echo "==> No packages found for '$1'."
+        else
+            echo "$result" | while IFS="|" read -r name version desc deps; do
+                echo "  $name ($version) - $desc"
+                [ -n "$deps" ] && echo "  deps: $deps"
+                is_installed "$name" && echo "  [installed]"
+            done
+        fi
+    fi
+}
+
 is_installed() {
     [ -f "$PKG_DB/$1" ]
 }
@@ -85,8 +113,9 @@ case "$1" in
     install) install_pkg "$2" ;;
     remove)  remove_pkg  "$2" ;;
     list)    list_installed ;;
+    search)  search_pkg  "$2" ;;
     *)
-        echo "freepkg - freeroot package manager"
-        echo "Use: freepkg [install|remove|list] <package>"
+        echo "freepkg - package manager"
+        echo "Use: freepkg [install|remove|list|search] <package>"
         ;;
 esac
