@@ -1,0 +1,6 @@
+name="libncursesw"
+version="6"
+desc="Library for TUI"
+deps=""
+url="..."
+sha256="..."

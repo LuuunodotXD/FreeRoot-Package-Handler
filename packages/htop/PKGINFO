@@ -1,0 +1,6 @@
+name="htop"
+version="3.3.0"
+desc="Interactive process viewer"
+deps="libncursesw libcap"
+url="..."
+sha256="..."

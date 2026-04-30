@@ -1,0 +1,6 @@
+name="libcap"
+version="2"
+desc="Library for POSIX"
+deps=""
+url="..."
+sha256="..."
