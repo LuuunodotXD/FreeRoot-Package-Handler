@@ -50,8 +50,26 @@ install_pkg() {
 remove_pkg() {
     is_installed "$1" || { echo "==> $1 is not installed."; exit 1; }
 
-    echo "==> Removing $1..."
+    # checa se algum pacote depende desse
+    deps_on=""
+    for pkg in $(ls "$PKG_DB/" | grep -v "\.files$"); do
+        pkgname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
+        . "/tmp/pkginfo_$pkgname" 2>/dev/null || \
+            curl -fsSL "$REPO/$pkgname/PKGINFO" -o "/tmp/pkginfo_$pkgname" 2>/dev/null && \
+            . "/tmp/pkginfo_$pkgname"
+        for dep in $deps; do
+            if [ "$dep" = "$1" ]; then
+                deps_on="$deps_on $pkgname"
+            fi
+        done
+    done
 
+    if [ -n "$deps_on" ]; then
+        echo "==> ERROR: cannot remove '$1', required by:$deps_on"
+        exit 1
+    fi
+
+    echo "==> Removing $1..."
     if [ -f "$PKG_DB/$1.files" ]; then
         while read -r file; do
             case "$file" in
