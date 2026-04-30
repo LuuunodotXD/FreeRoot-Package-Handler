@@ -3,3 +3,6 @@ calc|1.0|Simple calculator|
 greet|1.0|Dependency test|hello
 hello|1.0|Hello test program|
 hello-c|1.0|Hello test program in C|
+htop|3.3.0|Interactive process viewer|
+libcap|2|Library for POSIX|
+libncursesw|6|Library for TUI|
