@@ -5,7 +5,10 @@ REPO="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/mai
 REPO_INDEX="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/db/amd64.index"
 PKG_DB="/var/lib/pkgm/installed"
 PKG_CACHE="/var/cache/pkgm"
+SOURCES="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/sources"
+BUILD_DIR="/var/tmp/freepkg/build"
 
+mkdir -p "$BUILD_DIR"
 mkdir -p "$PKG_DB" "$PKG_CACHE"
 
 install_pkg() {
@@ -171,6 +174,106 @@ upgrade_one() {
     install_pkg "$1"
 }
 
+emerge_pkg() {
+    ask=0
+    pkgname=""
+
+    for arg in "$@"; do
+        case "$arg" in
+            --ask) ask=1 ;;
+            *) pkgname="$arg" ;;
+        esac
+    done
+
+    [ -z "$pkgname" ] && {
+        echo "Use: freepkg emerge [--ask] <package>"
+        exit 1
+    }
+
+    echo "==> Fetching source info for $pkgname..."
+    curl -fsSL "$SOURCES/$pkgname/SRCINFO" -o "/tmp/srcinfo_$pkgname" || {
+        echo "ERROR: source package '$pkgname' not found."
+        exit 1
+    }
+
+    . "/tmp/srcinfo_$pkgname"
+
+    # mostra resumo
+    echo ""
+    echo "  Package  : $name-$version"
+    echo "  Desc     : $desc"
+    [ -n "$deps" ]     && echo "  Deps     : $deps"
+    [ -n "$makedeps" ] && echo "  MakeDeps : $makedeps"
+    echo ""
+
+    # --ask
+    if [ "$ask" = "1" ]; then
+        printf "==> Proceed? [Y/n] "
+        read -r answer
+        case "$answer" in
+            n|N) echo "==> Aborted."; exit 0 ;;
+        esac
+    fi
+
+    # checa makedeps
+    for dep in $makedeps; do
+        command -v "$dep" >/dev/null 2>&1 || {
+            echo "ERROR: build dependency '$dep' not found. Install it first."
+            exit 1
+        }
+    done
+
+    # instala deps de runtime
+    for dep in $deps; do
+        is_installed "$dep" || install_pkg "$dep"
+    done
+
+    . "/tmp/srcinfo_$pkgname"
+
+    # baixa fonte
+    echo "==> Downloading source $name-$version..."
+    curl -fsSL "$url" -o "$BUILD_DIR/$name-$version.tar.$compress"
+
+    echo "==> Verifying checksum..."
+    echo "$sha256  $BUILD_DIR/$name-$version.tar.$compress" | sha256sum -c - || {
+        echo "ERROR: checksum invalid. Aborting."
+        exit 1
+    }
+
+    # extrai
+    echo "==> Extracting..."
+    mkdir -p "$BUILD_DIR/$name-$version-src"
+    tar -xf "$BUILD_DIR/$name-$version.tar.$compress" \
+        -C "$BUILD_DIR/$name-$version-src" --strip-components=1
+
+    pkgdir="$BUILD_DIR/$name-$version-pkg"
+    mkdir -p "$pkgdir"
+
+    # executa build
+    cd "$BUILD_DIR/$name-$version-src"
+    echo "==> Building $name-$version..."
+
+    i=1
+    while true; do
+        step=$(printf "build_%02d" $i)
+        cmd=$(eval echo \$$step)
+        [ -z "$cmd" ] && break
+        cmd=$(echo "$cmd" | sed "s|__PKGDIR__|$pkgdir|g")
+        echo "  => $cmd"
+        eval "$cmd" || { echo "ERROR: build failed at step $i."; exit 1; }
+        i=$((i + 1))
+    done
+
+    # instala
+    echo "==> Installing $name-$version..."
+    tar -czf "$BUILD_DIR/$name-$version-built.tar.gz" -C "$pkgdir" .
+    tar -xzf "$BUILD_DIR/$name-$version-built.tar.gz" -C /
+    tar -tzf "$BUILD_DIR/$name-$version-built.tar.gz" > "$PKG_DB/$name.files"
+
+    echo "$name=$version" > "$PKG_DB/$name"
+    echo "==> $name-$version built and installed sucessfully."
+}
+
 is_installed() {
     [ -f "$PKG_DB/$1" ]
 }
@@ -191,8 +294,10 @@ case "$1" in
     list)    list_installed ;;
     search)  search_pkg  "$2" ;;
     upgrade) upgrade_pkg "$2" ;;
+    emerge)  emerge_pkg  "$2" "$3" ;;
     *)
         echo "freepkg - package manager"
-        echo "Use: freepkg [install|remove|list|search|upgrade] <package>"
+        echo "Use: freepkg [install|remove|list|search|upgrade|emerge] <package>"
+        echo "     freepkg emerge --ask <package>"
         ;;
 esac
