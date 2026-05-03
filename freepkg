@@ -1,35 +1,79 @@
 #!/bin/sh
 set -e
 
+# ─── configuração ────────────────────────────────────────────────────────────
+CONF_DIR="/etc/freepkg"
+CONF_FILE="$CONF_DIR/freepkg.conf"
+
+# cria configuração padrão se não existir
+if [ ! -f "$CONF_FILE" ]; then
+    mkdir -p "$CONF_DIR"
+    cat > "$CONF_FILE" <<'EOF'
+# freepkg configuration file
+
 REPO="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/packages"
 REPO_INDEX="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/db/amd64.index"
-PKG_DB="/var/lib/pkgm/installed"
-PKG_CACHE="/var/cache/pkgm"
 SOURCES="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/sources"
+EOF
+fi
+
+. "$CONF_FILE"
+
+PKG_DB="/var/lib/freepkg/installed"
+PKG_CACHE="/var/cache/freepkg"
 BUILD_DIR="/var/tmp/freepkg/build"
+LOCAL_INDEX="/var/lib/freepkg/amd64.index"
 
-mkdir -p "$BUILD_DIR"
-mkdir -p "$PKG_DB" "$PKG_CACHE"
+mkdir -p "$PKG_DB" "$PKG_CACHE" "$BUILD_DIR"
 
+# ─── install ─────────────────────────────────────────────────────────────────
 install_pkg() {
-    if is_installed "$1"; then
-        echo "==> $1 is already installed."
-        return 0
-    fi
+    ask=0
+    pkgname=""
 
-    echo "==> Searching info about $1..."
-    curl -fsSL "$REPO/$1/PKGINFO" -o "/tmp/pkginfo_$1" || {
-        echo "ERROR: package '$1' not found in repository."
+    for arg in "$@"; do
+        case "$arg" in
+            --ask) ask=1 ;;
+            *) pkgname="$arg" ;;
+        esac
+    done
+
+    [ -z "$pkgname" ] && {
+        echo "Use: freepkg install [--ask] <package>"
         exit 1
     }
 
-    . "/tmp/pkginfo_$1"
+    if is_installed "$pkgname"; then
+        echo "==> $pkgname is already installed."
+        return 0
+    fi
+
+    echo "==> Searching info about $pkgname..."
+    curl -fsSL "$REPO/$pkgname/PKGINFO" -o "/tmp/pkginfo_$pkgname" || {
+        echo "ERROR: package '$pkgname' not found in repository."
+        exit 1
+    }
+
+    . "/tmp/pkginfo_$pkgname"
+
+    if [ "$ask" = "1" ]; then
+        echo ""
+        echo "  Package : $name-$version"
+        echo "  Desc    : $desc"
+        [ -n "$deps" ] && echo "  Deps    : $deps"
+        echo ""
+        printf "==> Proceed? [Y/n] "
+        read -r answer
+        case "$answer" in
+            n|N) echo "==> Aborted."; exit 0 ;;
+        esac
+    fi
 
     for dep in $deps; do
         is_installed "$dep" || install_pkg "$dep"
     done
 
-    . "/tmp/pkginfo_$1"
+    . "/tmp/pkginfo_$pkgname"
 
     echo "==> Downloading $name-$version...  Do not turn off target!"
     curl -fsSL "$url" -o "$PKG_CACHE/$name-$version.tar.gz"
@@ -42,18 +86,16 @@ install_pkg() {
 
     echo "==> Installing $name-$version..."
     tar -xzf "$PKG_CACHE/$name-$version.tar.gz" -C /
-
-    # salva manifesto dos arquivos instalados
     tar -tzf "$PKG_CACHE/$name-$version.tar.gz" > "$PKG_DB/$name.files"
 
     echo "$name=$version" > "$PKG_DB/$name"
     echo "==> $name-$version installed sucessfully."
 }
 
+# ─── remove ──────────────────────────────────────────────────────────────────
 remove_pkg() {
     is_installed "$1" || { echo "==> $1 is not installed."; exit 1; }
 
-    # checa se algum pacote depende desse
     deps_on=""
     for pkg in $(ls "$PKG_DB/" | grep -v "\.files$"); do
         pkgname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
@@ -89,21 +131,31 @@ remove_pkg() {
     echo "==> $1 removed sucessfully."
 }
 
-search_pkg() {
-    echo "==> Fetching package index..."
-    curl -fsSL "$REPO_INDEX" -o /tmp/freepkg.index || {
+# ─── update ──────────────────────────────────────────────────────────────────
+update_db() {
+    echo "==> Syncing package database..."
+    curl -fsSL "$REPO_INDEX" -o "$LOCAL_INDEX" || {
         echo "ERROR: could not fetch package index."
         exit 1
     }
+    count=$(grep -c "|" "$LOCAL_INDEX" 2>/dev/null || echo 0)
+    echo "==> Database synced. $count packages available."
+}
+
+# ─── search ──────────────────────────────────────────────────────────────────
+search_pkg() {
+    # usa índice local se existir, senão baixa
+    if [ ! -f "$LOCAL_INDEX" ]; then
+        echo "==> Local database not found, running update first..."
+        update_db
+    fi
 
     if [ -z "$1" ]; then
-        # sem argumento — lista tudo
-        grep -v "^#" /tmp/freepkg.index | while IFS="|" read -r name version desc deps; do
+        grep -v "^#" "$LOCAL_INDEX" | while IFS="|" read -r name version desc deps; do
             echo "  $name ($version) - $desc"
         done
     else
-        # busca pelo termo
-        result=$(grep -i "^$1|" /tmp/freepkg.index)
+        result=$(grep -i "^$1|" "$LOCAL_INDEX")
         if [ -z "$result" ]; then
             echo "==> No packages found for '$1'."
         else
@@ -116,18 +168,16 @@ search_pkg() {
     fi
 }
 
+# ─── upgrade ─────────────────────────────────────────────────────────────────
 upgrade_pkg() {
-    echo "==> Fetching package index..."
-    curl -fsSL "$REPO_INDEX" -o /tmp/freepkg.index || {
-        echo "ERROR: could not fetch package index."
-        exit 1
-    }
+    if [ ! -f "$LOCAL_INDEX" ]; then
+        echo "==> Local database not found, running update first..."
+        update_db
+    fi
 
-    # se passou argumento, atualiza só esse pacote
     if [ -n "$1" ]; then
         upgrade_one "$1"
     else
-        # atualiza todos os instalados
         ls "$PKG_DB/" | grep -v "\.files$" | while read -r pkg; do
             pkgname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
             upgrade_one "$pkgname"
@@ -138,14 +188,11 @@ upgrade_pkg() {
 upgrade_one() {
     is_installed "$1" || { echo "==> $1 is not installed."; return 1; }
 
-    # versão instalada
     installed_ver=$(cat "$PKG_DB/$1" | cut -d= -f2)
-
-    # versão disponível no índice
-    repo_ver=$(grep "^$1|" /tmp/freepkg.index | cut -d"|" -f2)
+    repo_ver=$(grep "^$1|" "$LOCAL_INDEX" | cut -d"|" -f2)
 
     if [ -z "$repo_ver" ]; then
-        echo "==> $1: not found in index, skipping."
+        echo "==> $1: not found in database, skipping."
         return 0
     fi
 
@@ -156,7 +203,6 @@ upgrade_one() {
 
     echo "==> Upgrading $1: $installed_ver -> $repo_ver..."
 
-    # remove arquivos antigos
     if [ -f "$PKG_DB/$1.files" ]; then
         while read -r file; do
             case "$file" in
@@ -167,13 +213,12 @@ upgrade_one() {
         rm -f "$PKG_DB/$1.files"
     fi
     rm -f "$PKG_DB/$1"
-
-    # limpa cache para forçar download novo
     rm -f "$PKG_CACHE/$1-"*.tar.gz
 
     install_pkg "$1"
 }
 
+# ─── emerge ──────────────────────────────────────────────────────────────────
 emerge_pkg() {
     ask=0
     pkgname=""
@@ -198,7 +243,6 @@ emerge_pkg() {
 
     . "/tmp/srcinfo_$pkgname"
 
-    # mostra resumo
     echo ""
     echo "  Package  : $name-$version"
     echo "  Desc     : $desc"
@@ -206,7 +250,6 @@ emerge_pkg() {
     [ -n "$makedeps" ] && echo "  MakeDeps : $makedeps"
     echo ""
 
-    # --ask
     if [ "$ask" = "1" ]; then
         printf "==> Proceed? [Y/n] "
         read -r answer
@@ -215,7 +258,6 @@ emerge_pkg() {
         esac
     fi
 
-    # checa makedeps
     for dep in $makedeps; do
         command -v "$dep" >/dev/null 2>&1 || {
             echo "ERROR: build dependency '$dep' not found. Install it first."
@@ -223,14 +265,12 @@ emerge_pkg() {
         }
     done
 
-    # instala deps de runtime
     for dep in $deps; do
         is_installed "$dep" || install_pkg "$dep"
     done
 
     . "/tmp/srcinfo_$pkgname"
 
-    # baixa fonte
     echo "==> Downloading source $name-$version..."
     curl -fsSL "$url" -o "$BUILD_DIR/$name-$version.tar.$compress"
 
@@ -240,7 +280,6 @@ emerge_pkg() {
         exit 1
     }
 
-    # extrai
     echo "==> Extracting..."
     mkdir -p "$BUILD_DIR/$name-$version-src"
     tar -xf "$BUILD_DIR/$name-$version.tar.$compress" \
@@ -249,7 +288,6 @@ emerge_pkg() {
     pkgdir="$BUILD_DIR/$name-$version-pkg"
     mkdir -p "$pkgdir"
 
-    # executa build
     cd "$BUILD_DIR/$name-$version-src"
     echo "==> Building $name-$version..."
 
@@ -264,7 +302,6 @@ emerge_pkg() {
         i=$((i + 1))
     done
 
-    # instala
     echo "==> Installing $name-$version..."
     tar -czf "$BUILD_DIR/$name-$version-built.tar.gz" -C "$pkgdir" .
     tar -xzf "$BUILD_DIR/$name-$version-built.tar.gz" -C /
@@ -274,6 +311,7 @@ emerge_pkg() {
     echo "==> $name-$version built and installed sucessfully."
 }
 
+# ─── helpers ─────────────────────────────────────────────────────────────────
 is_installed() {
     [ -f "$PKG_DB/$1" ]
 }
@@ -288,16 +326,29 @@ list_installed() {
     done
 }
 
+# ─── main ────────────────────────────────────────────────────────────────────
 case "$1" in
-    install) install_pkg "$2" ;;
+    install) install_pkg "$2" "$3" ;;
     remove)  remove_pkg  "$2" ;;
     list)    list_installed ;;
     search)  search_pkg  "$2" ;;
+    update)  update_db ;;
     upgrade) upgrade_pkg "$2" ;;
     emerge)  emerge_pkg  "$2" "$3" ;;
     *)
         echo "freepkg - package manager"
-        echo "Use: freepkg [install|remove|list|search|upgrade|emerge] <package>"
-        echo "     freepkg emerge --ask <package>"
+        echo ""
+        echo "Usage: freepkg <command> [options] <package>"
+        echo ""
+        echo "Commands:"
+        echo "  install [--ask] <pkg>   install a binary package"
+        echo "  remove  <pkg>           remove an installed package"
+        echo "  list                    list installed packages"
+        echo "  search  [pkg]           search available packages"
+        echo "  update                  sync local package database"
+        echo "  upgrade [pkg]           upgrade one or all packages"
+        echo "  emerge  [--ask] <pkg>   build and install from source"
+        echo ""
+        echo "Config: $CONF_FILE"
         ;;
 esac
