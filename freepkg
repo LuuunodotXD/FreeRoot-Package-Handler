@@ -245,7 +245,8 @@ emerge_pkg() {
     for arg in "$@"; do
         case "$arg" in
             --ask) ask=1 ;;
-            *) pkgname="$arg" ;;
+            "")    continue ;;
+            *)     pkgname="$arg" ;;
         esac
     done
 
