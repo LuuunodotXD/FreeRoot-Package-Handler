@@ -33,9 +33,9 @@ install_pkg() {
 
     for arg in "$@"; do
         case "$arg" in
-            --ask) ask=1 ;;
-            "")    continue ;;
-            *)     pkgname="$arg" ;;
+            --ask|-a) ask=1 ;;
+            "")       continue ;;
+            *)        pkgname="$arg" ;;
         esac
     done
 
@@ -405,7 +405,7 @@ case "$1" in
         echo "Usage: freepkg <command> [options] <package>"
         echo ""
         echo "Commands:"
-        echo "  install [--ask] <pkg>   install a binary package"
+        echo "  install [-a|--ask] <pkg>   install a binary package"
         echo "  remove  <pkg>           remove an installed package"
         echo "  list                    list installed packages"
         echo "  search  [pkg]           search available packages"
