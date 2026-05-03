@@ -253,18 +253,23 @@ upgrade_one() {
 # ─── emerge ──────────────────────────────────────────────────────────────────
 emerge_pkg() {
     ask=0
+    bind=0
     pkgname=""
 
     for arg in "$@"; do
         case "$arg" in
-            --ask) ask=1 ;;
-            "")    continue ;;
-            *)     pkgname="$arg" ;;
+            --ask)  ask=1 ;;
+            --bind) bind=1 ;;
+            -ab)    ask=1; bind=1 ;;
+            -a)     ask=1 ;;
+            -b)     bind=1 ;;
+            "")     continue ;;
+            *)      pkgname="$arg" ;;
         esac
     done
 
     [ -z "$pkgname" ] && {
-        echo "Use: freepkg emerge [--ask] <package>"
+        echo "Use: freepkg emerge [--ask] [--bind] <package>"
         exit 1
     }
 
@@ -309,7 +314,23 @@ emerge_pkg() {
     done
 
     for dep in $deps; do
-        is_installed "$dep" || install_pkg "$dep"
+        if ! is_installed "$dep"; then
+            if [ "$bind" = "1" ]; then
+                # tenta binário primeiro, depois fonte
+                if curl -fsSL "$REPO/$dep/PKGINFO" -o "/tmp/pkginfo_$dep" 2>/dev/null; then
+                    install_pkg "$dep"
+                else
+                    emerge_pkg "$dep"
+                fi
+            else
+                # padrão: tenta fonte primeiro, depois binário
+                if curl -fsSL "$SOURCES/$dep/SRCINFO" -o "/tmp/srcinfo_$dep" 2>/dev/null; then
+                    emerge_pkg "$dep"
+                else
+                    install_pkg "$dep"
+                fi
+            fi
+        fi
     done
 
     . "/tmp/srcinfo_$pkgname"
@@ -390,7 +411,8 @@ case "$1" in
         echo "  search  [pkg]           search available packages"
         echo "  update                  sync local package database"
         echo "  upgrade [pkg]           upgrade one or all packages"
-        echo "  emerge  [--ask] <pkg>   build and install from source"
+        echo "  emerge  [--ask] [--bind] <pkg>   build and install from source"
+        echo "          -a (--ask)  -b (--bind)  -ab (both)"
         echo ""
         echo "Config: $CONF_FILE"
         ;;
