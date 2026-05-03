@@ -57,12 +57,25 @@ install_pkg() {
 
     . "/tmp/pkginfo_$pkgname"
 
+    # tamanho do pacote
+    size=$(curl -sI "$url" | grep -i content-length | awk '{print $2}' | tr -d '\r')
+    if [ -n "$size" ] && [ "$size" -gt 0 ] 2>/dev/null; then
+        size_mib=$(awk "BEGIN {printf \"%.2f\", $size/1048576}")
+        size_str="${size_mib} MiB"
+    else
+        size_str="unknown"
+    fi
+
+    # resumo sempre exibido
+    echo ""
+    echo "  Package : $name-$version"
+    echo "  Desc    : $desc"
+    [ -n "$deps" ] && echo "  Deps    : $deps"
+    echo "  Size    : $size_str"
+    echo ""
+
+    # prompt só com --ask
     if [ "$ask" = "1" ]; then
-        echo ""
-        echo "  Package : $name-$version"
-        echo "  Desc    : $desc"
-        [ -n "$deps" ] && echo "  Deps    : $deps"
-        echo ""
         printf "==> Proceed? [Y/n] "
         read -r answer
         case "$answer" in
@@ -263,11 +276,21 @@ emerge_pkg() {
 
     . "/tmp/srcinfo_$pkgname"
 
+    # tamanho do fonte
+    size=$(curl -sI "$url" | grep -i content-length | awk '{print $2}' | tr -d '\r')
+    if [ -n "$size" ] && [ "$size" -gt 0 ] 2>/dev/null; then
+        size_mib=$(awk "BEGIN {printf \"%.2f\", $size/1048576}")
+        size_str="${size_mib} MiB"
+    else
+        size_str="unknown"
+    fi
+
     echo ""
     echo "  Package  : $name-$version"
     echo "  Desc     : $desc"
     [ -n "$deps" ]     && echo "  Deps     : $deps"
     [ -n "$makedeps" ] && echo "  MakeDeps : $makedeps"
+    echo "  Size     : $size_str"
     echo ""
 
     if [ "$ask" = "1" ]; then
