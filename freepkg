@@ -202,52 +202,83 @@ search_pkg() {
 
 # ─── upgrade ─────────────────────────────────────────────────────────────────
 upgrade_pkg() {
+    compile=0
+    pkgname=""
+
+    for arg in "$@"; do
+        case "$arg" in
+            --compile|-c) compile=1 ;;
+            "")           continue ;;
+            *)            pkgname="$arg" ;;
+        esac
+    done
+
     if [ ! -f "$LOCAL_INDEX" ]; then
         echo "==> Local database not found, running update first..."
         update_db
     fi
 
-    if [ -n "$1" ]; then
-        upgrade_one "$1"
+    if [ -n "$pkgname" ]; then
+        # pacote específico
+        upgrade_one "$pkgname" "$compile"
     else
+        # todos os instalados
         ls "$PKG_DB/" | grep -v "\.files$" | while read -r pkg; do
-            pkgname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
-            upgrade_one "$pkgname"
+            pname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
+            upgrade_one "$pname" "$compile"
         done
     fi
 }
 
 upgrade_one() {
-    is_installed "$1" || { echo "==> $1 is not installed."; return 1; }
+    pkgname="$1"
+    compile="$2"
 
-    installed_ver=$(cat "$PKG_DB/$1" | cut -d= -f2)
-    repo_ver=$(grep "^$1|" "$LOCAL_INDEX" | cut -d"|" -f2)
+    is_installed "$pkgname" || { echo "==> $pkgname is not installed."; return 1; }
+
+    installed_ver=$(cat "$PKG_DB/$pkgname" | cut -d= -f2)
+    repo_ver=$(grep "^$pkgname|" "$LOCAL_INDEX" | cut -d"|" -f2)
 
     if [ -z "$repo_ver" ]; then
-        echo "==> $1: not found in database, skipping."
+        echo "==> $pkgname: not found in database, skipping."
         return 0
     fi
 
     if [ "$installed_ver" = "$repo_ver" ]; then
-        echo "==> $1: already up to date ($installed_ver)."
+        echo "==> $pkgname: already up to date ($installed_ver)."
         return 0
     fi
 
-    echo "==> Upgrading $1: $installed_ver -> $repo_ver..."
+    echo "==> Upgrading $pkgname: $installed_ver -> $repo_ver..."
 
-    if [ -f "$PKG_DB/$1.files" ]; then
+    # remove arquivos antigos
+    if [ -f "$PKG_DB/$pkgname.files" ]; then
         while read -r file; do
             case "$file" in
                 */) continue ;;
             esac
             rm -f "/$file"
-        done < "$PKG_DB/$1.files"
-        rm -f "$PKG_DB/$1.files"
+        done < "$PKG_DB/$pkgname.files"
+        rm -f "$PKG_DB/$pkgname.files"
     fi
-    rm -f "$PKG_DB/$1"
-    rm -f "$PKG_CACHE/$1-"*.tar.gz
+    rm -f "$PKG_DB/$pkgname"
+    rm -f "$PKG_CACHE/$pkgname-"*.tar.gz
 
-    install_pkg "$1"
+    if [ "$compile" = "1" ]; then
+        # --compile: tenta fonte primeiro, depois binário
+        if curl -fsSL "$SOURCES/$pkgname/SRCINFO" -o "/tmp/srcinfo_$pkgname" 2>/dev/null; then
+            emerge_pkg "$pkgname"
+        else
+            install_pkg "$pkgname"
+        fi
+    else
+        # padrão: tenta binário primeiro, depois fonte
+        if curl -fsSL "$REPO/$pkgname/PKGINFO" -o "/tmp/pkginfo_$pkgname" 2>/dev/null; then
+            install_pkg "$pkgname"
+        else
+            emerge_pkg "$pkgname"
+        fi
+    fi
 }
 
 # ─── emerge ──────────────────────────────────────────────────────────────────
