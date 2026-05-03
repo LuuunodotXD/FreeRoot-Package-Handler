@@ -94,41 +94,59 @@ install_pkg() {
 
 # ─── remove ──────────────────────────────────────────────────────────────────
 remove_pkg() {
-    is_installed "$1" || { echo "==> $1 is not installed."; exit 1; }
+    force=0
+    pkgname=""
 
-    deps_on=""
-    for pkg in $(ls "$PKG_DB/" | grep -v "\.files$"); do
-        pkgname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
-        . "/tmp/pkginfo_$pkgname" 2>/dev/null || \
-            curl -fsSL "$REPO/$pkgname/PKGINFO" -o "/tmp/pkginfo_$pkgname" 2>/dev/null && \
-            . "/tmp/pkginfo_$pkgname"
-        for dep in $deps; do
-            if [ "$dep" = "$1" ]; then
-                deps_on="$deps_on $pkgname"
-            fi
-        done
+    for arg in "$@"; do
+        case "$arg" in
+            --force) force=1 ;;
+            *) pkgname="$arg" ;;
+        esac
     done
 
-    if [ -n "$deps_on" ]; then
-        echo "==> ERROR: cannot remove '$1', required by:$deps_on"
-        exit 1
+    if ! is_installed "$pkgname"; then
+        if [ "$force" = "1" ]; then
+            echo "==> WARNING: $pkgname not in database, forcing removal..."
+        else
+            echo "==> $pkgname is not installed. Use --force to remove anyway."
+            exit 1
+        fi
     fi
 
-    echo "==> Removing $1..."
-    if [ -f "$PKG_DB/$1.files" ]; then
+    # checa dependências (só se estiver no banco)
+    if is_installed "$pkgname"; then
+        deps_on=""
+        for pkg in $(ls "$PKG_DB/" | grep -v "\.files$"); do
+            pname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
+            . "/tmp/pkginfo_$pname" 2>/dev/null || \
+                curl -fsSL "$REPO/$pname/PKGINFO" -o "/tmp/pkginfo_$pname" 2>/dev/null && \
+                . "/tmp/pkginfo_$pname"
+            for dep in $deps; do
+                [ "$dep" = "$pkgname" ] && deps_on="$deps_on $pname"
+            done
+        done
+
+        if [ -n "$deps_on" ]; then
+            echo "==> ERROR: cannot remove '$pkgname', required by:$deps_on"
+            exit 1
+        fi
+    fi
+
+    echo "==> Removing $pkgname..."
+    if [ -f "$PKG_DB/$pkgname.files" ]; then
         while read -r file; do
             case "$file" in
                 */) continue ;;
             esac
             rm -f "/$file"
-        done < "$PKG_DB/$1.files"
-        rm -f "$PKG_DB/$1.files"
+        done < "$PKG_DB/$pkgname.files"
+        rm -f "$PKG_DB/$pkgname.files"
     else
         echo "==> WARNING: no file manifest found, only removing from database."
     fi
 
-    rm -f "$PKG_DB/$1"
-    echo "==> $1 removed sucessfully."
+    rm -f "$PKG_DB/$pkgname"
+    echo "==> $pkgname removed sucessfully."
 }
 
 # ─── update ──────────────────────────────────────────────────────────────────
@@ -329,7 +347,7 @@ list_installed() {
 # ─── main ────────────────────────────────────────────────────────────────────
 case "$1" in
     install) install_pkg "$2" "$3" ;;
-    remove)  remove_pkg  "$2" ;;
+    remove)  remove_pkg  "$3" "$2" ;;
     list)    list_installed ;;
     search)  search_pkg  "$2" ;;
     update)  update_db ;;
