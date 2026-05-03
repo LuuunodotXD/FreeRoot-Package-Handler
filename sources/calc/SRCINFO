@@ -1,0 +1,12 @@
+name="calc"
+version="1.0"
+desc="Simple calculator"
+deps=""
+makedeps="clang"
+url="https://raw.githubusercontent.com/LuuunodotXD/FreeRoot-Package-Handler/main/sources/calc/calc-1.0.tar.gz"
+sha256="33ee2b826653d9d6b43e02292691f7b6c1101f7a9af5ad2997bdf32cf5b2deb2"
+compress="gz"
+
+build_01="clang calc.c -o calc"
+build_02="mkdir -p __PKGDIR__/usr/local/bin"
+build_03="cp calc __PKGDIR__/usr/local/bin/"
