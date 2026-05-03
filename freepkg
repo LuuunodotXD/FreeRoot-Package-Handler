@@ -113,6 +113,64 @@ search_pkg() {
     fi
 }
 
+upgrade_pkg() {
+    echo "==> Fetching package index..."
+    curl -fsSL "$REPO_INDEX" -o /tmp/freepkg.index || {
+        echo "ERROR: could not fetch package index."
+        exit 1
+    }
+
+    # se passou argumento, atualiza só esse pacote
+    if [ -n "$1" ]; then
+        upgrade_one "$1"
+    else
+        # atualiza todos os instalados
+        ls "$PKG_DB/" | grep -v "\.files$" | while read -r pkg; do
+            pkgname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
+            upgrade_one "$pkgname"
+        done
+    fi
+}
+
+upgrade_one() {
+    is_installed "$1" || { echo "==> $1 is not installed."; return 1; }
+
+    # versão instalada
+    installed_ver=$(cat "$PKG_DB/$1" | cut -d= -f2)
+
+    # versão disponível no índice
+    repo_ver=$(grep "^$1|" /tmp/freepkg.index | cut -d"|" -f2)
+
+    if [ -z "$repo_ver" ]; then
+        echo "==> $1: not found in index, skipping."
+        return 0
+    fi
+
+    if [ "$installed_ver" = "$repo_ver" ]; then
+        echo "==> $1: already up to date ($installed_ver)."
+        return 0
+    fi
+
+    echo "==> Upgrading $1: $installed_ver -> $repo_ver..."
+
+    # remove arquivos antigos
+    if [ -f "$PKG_DB/$1.files" ]; then
+        while read -r file; do
+            case "$file" in
+                */) continue ;;
+            esac
+            rm -f "/$file"
+        done < "$PKG_DB/$1.files"
+        rm -f "$PKG_DB/$1.files"
+    fi
+    rm -f "$PKG_DB/$1"
+
+    # limpa cache para forçar download novo
+    rm -f "$PKG_CACHE/$1-"*.tar.gz
+
+    install_pkg "$1"
+}
+
 is_installed() {
     [ -f "$PKG_DB/$1" ]
 }
@@ -132,8 +190,9 @@ case "$1" in
     remove)  remove_pkg  "$2" ;;
     list)    list_installed ;;
     search)  search_pkg  "$2" ;;
+    upgrade) upgrade_pkg "$2" ;;
     *)
         echo "freepkg - package manager"
-        echo "Use: freepkg [install|remove|list|search] <package>"
+        echo "Use: freepkg [install|remove|list|search|upgrade] <package>"
         ;;
 esac
