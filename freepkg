@@ -483,6 +483,12 @@ emerge_pkg() {
         fi
     done
 
+    # re-sourcea após deps para restaurar variáveis do pacote original
+    . "/tmp/srcinfo_$pkgname"
+    _srcdir="$BUILD_DIR/$name-$version-src"
+    pkgdir="$BUILD_DIR/$name-$version-pkg"
+    mkdir -p "$pkgdir"
+
     . "/tmp/srcinfo_$pkgname"
 
     echo "==> Downloading source $name-$version..."
