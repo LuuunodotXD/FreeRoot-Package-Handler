@@ -400,6 +400,7 @@ _do_upgrade_source() {
 }
 
 # ─── emerge ──────────────────────────────────────────────────────────────────
+# emerge_pkg: interface pública — faz o parse das flags e chama _emerge_build
 emerge_pkg() {
     ask=0
     bind=0
@@ -454,7 +455,15 @@ emerge_pkg() {
         esac
     fi
 
+    _emerge_build "$pkgname" "$bind"
+}
+
+# _emerge_build: trabalho real
+# $1 = pkgname  $2 = bind
+# $1 é local por chamada de função em sh — nunca é sobrescrito pela recursão
+_emerge_build() {
     # checa makedeps
+    . "/tmp/srcinfo_$1"
     for dep in $makedeps; do
         command -v "$dep" >/dev/null 2>&1 || {
             echo "ERROR: build dependency '$dep' not found. Install it first."
@@ -462,19 +471,21 @@ emerge_pkg() {
         }
     done
 
-    # instala deps de runtime
+    # instala deps de runtime — após cada dep, $1 ainda é nosso pkgname
+    . "/tmp/srcinfo_$1"
     for dep in $deps; do
         if ! is_installed "$dep"; then
-            if [ "$bind" = "1" ]; then
+            if [ "$2" = "1" ]; then
+                # --bind: tenta binário primeiro
                 if curl -fsSL "$REPO/$dep/PKGINFO" -o "/tmp/pkginfo_$dep" 2>/dev/null; then
                     install_pkg "$dep"
                 else
-                # padrão, tenta fonte primeiro
-                    (emerge_pkg "$dep")
+                    _emerge_build "$dep" "$2"
                 fi
             else
+                # padrão: tenta fonte primeiro
                 if curl -fsSL "$SOURCES/$dep/SRCINFO" -o "/tmp/srcinfo_$dep" 2>/dev/null; then
-                    (emerge_pkg "$dep")
+                    _emerge_build "$dep" "$2"
                 else
                     install_pkg "$dep"
                 fi
@@ -482,8 +493,8 @@ emerge_pkg() {
         fi
     done
 
-    # re-sourcea após deps para restaurar variáveis do pacote original
-    . "/tmp/srcinfo_$pkgname"
+    # re-sourcea com $1 que nunca foi sobrescrito
+    . "/tmp/srcinfo_$1"
 
     echo "==> Downloading source $name-$version..."
     curl -fsSL "$url" -o "$BUILD_DIR/$name-$version.tar.$compress"
@@ -499,11 +510,12 @@ emerge_pkg() {
     tar -xf "$BUILD_DIR/$name-$version.tar.$compress" \
         -C "$BUILD_DIR/$name-$version-src" --strip-components=1
 
-    pkgdir="$BUILD_DIR/$name-$version-pkg"
-    mkdir -p "$pkgdir"
-
-    . "/tmp/srcinfo_$pkgname"
+    # re-sourcea de novo para garantir vars corretas após extração
+    . "/tmp/srcinfo_$1"
     _srcdir="$BUILD_DIR/$name-$version-src"
+    _pkgdir="$BUILD_DIR/$name-$version-pkg"
+    mkdir -p "$_pkgdir"
+
     cd "$_srcdir"
     echo "==> Building $name-$version..."
 
@@ -513,14 +525,14 @@ emerge_pkg() {
         cmd=$(eval echo \$$step)
         [ -z "$cmd" ] && break
         cd "$_srcdir"
-        cmd=$(echo "$cmd" | sed "s|__PKGDIR__|$pkgdir|g")
+        cmd=$(echo "$cmd" | sed "s|__PKGDIR__|$_pkgdir|g")
         echo "  => $cmd"
         eval "$cmd" || { echo "ERROR: build failed at step $i."; exit 1; }
         i=$((i + 1))
     done
 
     echo "==> Installing $name-$version..."
-    tar -czf "$BUILD_DIR/$name-$version-built.tar.gz" -C "$pkgdir" .
+    tar -czf "$BUILD_DIR/$name-$version-built.tar.gz" -C "$_pkgdir" .
     tar -xzf "$BUILD_DIR/$name-$version-built.tar.gz" -C /
     tar -tzf "$BUILD_DIR/$name-$version-built.tar.gz" > "$PKG_DB/$name.files"
 
