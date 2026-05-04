@@ -505,6 +505,8 @@ emerge_pkg() {
 
     . "/tmp/srcinfo_$pkgname"
 
+    . "/tmp/srcinfo_$pkgname"
+
     echo "==> Downloading source $name-$version..."
     curl -fsSL "$url" -o "$BUILD_DIR/$name-$version.tar.$compress"
 
@@ -522,6 +524,7 @@ emerge_pkg() {
     pkgdir="$BUILD_DIR/$name-$version-pkg"
     mkdir -p "$pkgdir"
 
+    . "/tmp/srcinfo_$pkgname"
     _srcdir="$BUILD_DIR/$name-$version-src"
     cd "$_srcdir"
     echo "==> Building $name-$version..."
