@@ -482,29 +482,7 @@ emerge_pkg() {
         fi
     done
 
-    # restaura contexto do pacote original após deps
-    . "/tmp/srcinfo_$pkgname"
-    _srcdir="$BUILD_DIR/$name-$version-src"
-    pkgdir="$BUILD_DIR/$name-$version-pkg"
-    mkdir -p "$pkgdir"
-
-    cd "$_srcdir"
-    echo "==> Building $name-$version..."
-
-    i=1
-    while true; do
-        step=$(printf "build_%02d" $i)
-        cmd=$(eval echo \$$step)
-        [ -z "$cmd" ] && break
-        cd "$_srcdir"
-        cmd=$(echo "$cmd" | sed "s|__PKGDIR__|$pkgdir|g")
-        echo "  => $cmd"
-        eval "$cmd" || { echo "ERROR: build failed at step $i."; exit 1; }
-        i=$((i + 1))
-    done
-
-    . "/tmp/srcinfo_$pkgname"
-
+    # re-sourcea após deps para restaurar variáveis do pacote original
     . "/tmp/srcinfo_$pkgname"
 
     echo "==> Downloading source $name-$version..."
