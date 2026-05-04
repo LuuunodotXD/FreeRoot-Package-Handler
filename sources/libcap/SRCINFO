@@ -8,4 +8,4 @@ sha256="9cc2fa3ee744d881629cdac1a1b54c302e7684fda3e3622056218c7681642ffb"
 compress="gz"
 
 build_01='make CC=clang lib=lib prefix=/usr PAM_CAP=no'
-build_02='make DESTDIR=__PKGDIR__ lib=lib prefix=/usr PAM_CAP=no install'
+build_02='make DESTDIR=__PKGDIR__ prefix=/usr lib=lib PAM_CAP=no install'
