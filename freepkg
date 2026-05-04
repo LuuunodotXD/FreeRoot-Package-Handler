@@ -466,16 +466,15 @@ emerge_pkg() {
     for dep in $deps; do
         if ! is_installed "$dep"; then
             if [ "$bind" = "1" ]; then
-                # --bind: tenta binário primeiro
                 if curl -fsSL "$REPO/$dep/PKGINFO" -o "/tmp/pkginfo_$dep" 2>/dev/null; then
                     install_pkg "$dep"
                 else
-                    emerge_pkg "$dep"
+                # padrão, tenta fonte primeiro
+                    (emerge_pkg "$dep")
                 fi
             else
-                # padrão: tenta fonte primeiro
                 if curl -fsSL "$SOURCES/$dep/SRCINFO" -o "/tmp/srcinfo_$dep" 2>/dev/null; then
-                    emerge_pkg "$dep"
+                    (emerge_pkg "$dep")
                 else
                     install_pkg "$dep"
                 fi
