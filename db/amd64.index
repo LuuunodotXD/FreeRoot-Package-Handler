@@ -1,8 +1,8 @@
-# formato: nome|versão|descrição|dependências
-calc|1.0|Simple calculator|
-greet|1.0|Dependency test|hello
-hello|1.1|Hello test program|
-hello-c|1.0|Hello test program in C|
-htop|3.3.0|Interactive process viewer|
-libcap|2|POSIX capabilities library|
-libncursesw|6|Library for TUI|
+# name|version|build_date|desc|deps
+calc|1.0|2025/05/03|Simple calculator|
+hello|1.1|2025/05/03|Hello test program|
+htop|3.3.0|2025/05/03|Interactive process viewer|libncursesw libcap
+greet|1.0|2025/05/03|Dependency test|hello
+hello-c|1.0|2025/05/03|Hello test program in C|
+libcap|2|2025/05/02|POSIX capabilities library|
+libncursesw|6|2025/05/03|Library for TUI|

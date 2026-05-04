@@ -1,0 +1,5 @@
+# name|version|build_date|desc|deps|makedeps
+calc|1.0|2025/05/03|Simple calculator||clang
+htop|3.3.0|2025/05/03|Interactive process viewer|libncursesw libcap|clang make autoconf automake
+libcap|2.69|2025/05/03|POSIX capabilities library||
+
