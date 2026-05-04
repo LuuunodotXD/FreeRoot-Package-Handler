@@ -502,7 +502,8 @@ emerge_pkg() {
     pkgdir="$BUILD_DIR/$name-$version-pkg"
     mkdir -p "$pkgdir"
 
-    cd "$BUILD_DIR/$name-$version-src"
+    _srcdir="$BUILD_DIR/$name-$version-src"
+    cd "$_srcdir"
     echo "==> Building $name-$version..."
 
     i=1
@@ -510,6 +511,7 @@ emerge_pkg() {
         step=$(printf "build_%02d" $i)
         cmd=$(eval echo \$$step)
         [ -z "$cmd" ] && break
+        cd "$_srcdir"
         cmd=$(echo "$cmd" | sed "s|__PKGDIR__|$pkgdir|g")
         echo "  => $cmd"
         eval "$cmd" || { echo "ERROR: build failed at step $i."; exit 1; }
