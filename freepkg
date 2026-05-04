@@ -112,6 +112,7 @@ install_pkg() {
         is_installed "$dep" || install_pkg "$dep"
     done
 
+    # re-sourcea usando pkgname, não $1
     . "/tmp/pkginfo_$pkgname"
 
     echo "==> Downloading $name-$version...  Do not turn off target!"
