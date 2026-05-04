@@ -539,9 +539,11 @@ list_installed() {
         name=$(echo "$entry"  | cut -d= -f1)
         ver=$(echo "$entry"   | cut -d= -f2 | cut -d'|' -f1)
         bdate=$(echo "$entry" | cut -d'|' -f2)
-        [ "$bdate" = "0" ] || [ -z "$bdate" ] \
-            && echo "  $name=$ver" \
-            || echo "  $name=$ver ($bdate)"
+        if [ -z "$bdate" ] || [ "$bdate" = "$entry" ]; then
+            echo "  $name=$ver"
+        else
+            echo "  $name=$ver ($bdate)"
+        fi
     done
 }
 
