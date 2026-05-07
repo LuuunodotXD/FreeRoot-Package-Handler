@@ -32,6 +32,7 @@ mkdir -p "$PKG_DB" "$PKG_CACHE" "$BUILD_DIR"
 # build_date: yyyy/mm/dd — comparado como inteiro sem barras
 # pacotes sem build_date recebem "0"
 
+# ─── helpers de versão ───────────────────────────────────────────────────────
 get_installed_ver() {
     cat "$PKG_DB/$1" 2>/dev/null | cut -d= -f2 | cut -d'|' -f1
 }
@@ -39,6 +40,10 @@ get_installed_ver() {
 get_installed_date() {
     d=$(cat "$PKG_DB/$1" 2>/dev/null | cut -d'|' -f2)
     [ -z "$d" ] && echo "0" || echo "$d"
+}
+
+get_installed_method() {
+    cat "$PKG_DB/$1" 2>/dev/null | cut -d'|' -f3
 }
 
 # retorna: newer / same / older  ($1 comparado com $2)
@@ -130,7 +135,7 @@ install_pkg() {
 
     _bdate=$(grep "^$name|" "$LOCAL_INDEX" 2>/dev/null | cut -d'|' -f3)
     [ -z "$_bdate" ] && _bdate="0"
-    echo "$name=$version|$_bdate" > "$PKG_DB/$name"
+    echo "$name=$version|$_bdate|bin" > "$PKG_DB/$name"
     echo "==> $name-$version installed sucessfully."
 }
 
@@ -264,15 +269,33 @@ search_pkg() {
 # ─── upgrade ─────────────────────────────────────────────────────────────────
 upgrade_pkg() {
     compile=0
+    binonly=0
+    srconly=0
     pkgname=""
 
     for arg in "$@"; do
         case "$arg" in
             --compile|-c) compile=1 ;;
+            --bin)        binonly=1 ;;
+            --src)        srconly=1 ;;
             "")           continue ;;
             *)            pkgname="$arg" ;;
         esac
     done
+
+    # validação: --bin e --src não combinam entre si nem com --compile
+    if [ "$binonly" = "1" ] && [ "$srconly" = "1" ]; then
+        echo "ERROR: --bin and --src cannot be used together."
+        exit 1
+    fi
+    if [ "$compile" = "1" ] && [ "$binonly" = "1" ]; then
+        echo "ERROR: --compile and --bin cannot be used together."
+        exit 1
+    fi
+    if [ "$compile" = "1" ] && [ "$srconly" = "1" ]; then
+        echo "ERROR: --compile and --src cannot be used together."
+        exit 1
+    fi
 
     if [ ! -f "$LOCAL_INDEX" ] || [ ! -f "$LOCAL_SOURCES_INDEX" ]; then
         echo "==> Local database not found, running update first..."
@@ -280,11 +303,11 @@ upgrade_pkg() {
     fi
 
     if [ -n "$pkgname" ]; then
-        upgrade_one "$pkgname" "$compile"
+        upgrade_one "$pkgname" "$compile" "$binonly" "$srconly"
     else
         ls "$PKG_DB/" | grep -v "\.files$" | while read -r pkg; do
             pname=$(cat "$PKG_DB/$pkg" | cut -d= -f1)
-            upgrade_one "$pname" "$compile"
+            upgrade_one "$pname" "$compile" "$binonly" "$srconly"
         done
     fi
 }
@@ -292,26 +315,38 @@ upgrade_pkg() {
 upgrade_one() {
     pkgname="$1"
     compile="$2"
+    binonly="$3"
+    srconly="$4"
 
     is_installed "$pkgname" || { echo "==> $pkgname is not installed."; return 1; }
 
+    method=$(get_installed_method "$pkgname")
     installed_ver=$(get_installed_ver "$pkgname")
     installed_date=$(get_installed_date "$pkgname")
 
-    # info do repositório binário
+    # filtra por método
+    if [ "$binonly" = "1" ] && [ "$method" = "src" ]; then
+        echo "==> $pkgname: skipping (installed from source)."
+        return 0
+    fi
+    if [ "$srconly" = "1" ] && [ "$method" = "bin" ]; then
+        echo "==> $pkgname: skipping (installed from binary)."
+        return 0
+    fi
+
+    # info dos repositórios
     bin_entry=$(grep "^$pkgname|" "$LOCAL_INDEX" 2>/dev/null || true)
     bin_ver=$(echo "$bin_entry"  | cut -d'|' -f2)
     bin_date=$(echo "$bin_entry" | cut -d'|' -f3)
     [ -z "$bin_date" ] && bin_date="0"
 
-    # info do repositório de fontes
     src_entry=$(grep "^$pkgname|" "$LOCAL_SOURCES_INDEX" 2>/dev/null || true)
     src_ver=$(echo "$src_entry"  | cut -d'|' -f2)
     src_date=$(echo "$src_entry" | cut -d'|' -f3)
     [ -z "$src_date" ] && src_date="0"
 
-    if [ "$compile" = "0" ]; then
-        # modo binário: prioriza binário
+    if [ "$binonly" = "1" ]; then
+        # --bin: só atualiza binário, ignora se fonte mais novo
         if [ -n "$bin_entry" ]; then
             cmp=$(compare_dates "$bin_date" "$installed_date")
             if [ "$cmp" = "newer" ]; then
@@ -319,28 +354,13 @@ upgrade_one() {
                 _do_upgrade_binary "$pkgname"
             else
                 echo "==> $pkgname: already up to date ($installed_ver)."
-                # avisa se fonte tem versão mais nova
-                if [ -n "$src_entry" ]; then
-                    src_cmp=$(compare_dates "$src_date" "$installed_date")
-                    if [ "$src_cmp" = "newer" ]; then
-                        echo "    NOTE: $pkgname has a newer version in sources ($src_ver). Use 'upgrade -c' to compile it."
-                    fi
-                fi
-            fi
-        elif [ -n "$src_entry" ]; then
-            # não existe em binário, tenta fonte
-            cmp=$(compare_dates "$src_date" "$installed_date")
-            if [ "$cmp" = "newer" ]; then
-                echo "==> $pkgname not in binary repo, upgrading from source: $installed_ver -> $src_ver..."
-                _do_upgrade_source "$pkgname"
-            else
-                echo "==> $pkgname: already up to date ($installed_ver)."
             fi
         else
-            echo "==> $pkgname: not found in any repository, skipping."
+            echo "==> $pkgname: not in binary repo, skipping."
         fi
-    else
-        # modo fonte (-c): prioriza fonte
+
+    elif [ "$srconly" = "1" ]; then
+        # --src: só atualiza fonte, ignora se binário mais novo
         if [ -n "$src_entry" ]; then
             cmp=$(compare_dates "$src_date" "$installed_date")
             if [ "$cmp" = "newer" ]; then
@@ -348,25 +368,53 @@ upgrade_one() {
                 _do_upgrade_source "$pkgname"
             else
                 echo "==> $pkgname: already up to date ($installed_ver)."
-                # avisa se binário tem versão mais nova
-                if [ -n "$bin_entry" ]; then
-                    bin_cmp=$(compare_dates "$bin_date" "$installed_date")
-                    if [ "$bin_cmp" = "newer" ]; then
-                        echo "    NOTE: $pkgname has a newer version in binary repo ($bin_ver). Use 'upgrade' to install it."
-                    fi
-                fi
-            fi
-        elif [ -n "$bin_entry" ]; then
-            # não existe em fonte, tenta binário
-            cmp=$(compare_dates "$bin_date" "$installed_date")
-            if [ "$cmp" = "newer" ]; then
-                echo "==> $pkgname not in source repo, upgrading from binary: $installed_ver -> $bin_ver..."
-                _do_upgrade_binary "$pkgname"
-            else
-                echo "==> $pkgname: already up to date ($installed_ver)."
             fi
         else
-            echo "==> $pkgname: not found in any repository, skipping."
+            echo "==> $pkgname: not in source repo, skipping."
+        fi
+
+    else
+        # comportamento normal (com ou sem --compile)
+        if [ "$compile" = "0" ]; then
+            if [ -n "$bin_entry" ]; then
+                cmp=$(compare_dates "$bin_date" "$installed_date")
+                if [ "$cmp" = "newer" ]; then
+                    echo "==> Upgrading $pkgname: $installed_ver -> $bin_ver (binary)..."
+                    _do_upgrade_binary "$pkgname"
+                else
+                    echo "==> $pkgname: already up to date ($installed_ver)."
+                    if [ -n "$src_entry" ]; then
+                        src_cmp=$(compare_dates "$src_date" "$installed_date")
+                        [ "$src_cmp" = "newer" ] && echo "    NOTE: newer version in sources ($src_ver). Use 'upgrade -c'."
+                    fi
+                fi
+            elif [ -n "$src_entry" ]; then
+                cmp=$(compare_dates "$src_date" "$installed_date")
+                [ "$cmp" = "newer" ] && _do_upgrade_source "$pkgname" \
+                    || echo "==> $pkgname: already up to date ($installed_ver)."
+            else
+                echo "==> $pkgname: not found in any repository, skipping."
+            fi
+        else
+            if [ -n "$src_entry" ]; then
+                cmp=$(compare_dates "$src_date" "$installed_date")
+                if [ "$cmp" = "newer" ]; then
+                    echo "==> Upgrading $pkgname: $installed_ver -> $src_ver (source)..."
+                    _do_upgrade_source "$pkgname"
+                else
+                    echo "==> $pkgname: already up to date ($installed_ver)."
+                    if [ -n "$bin_entry" ]; then
+                        bin_cmp=$(compare_dates "$bin_date" "$installed_date")
+                        [ "$bin_cmp" = "newer" ] && echo "    NOTE: newer version in binary repo ($bin_ver). Use 'upgrade'."
+                    fi
+                fi
+            elif [ -n "$bin_entry" ]; then
+                cmp=$(compare_dates "$bin_date" "$installed_date")
+                [ "$cmp" = "newer" ] && _do_upgrade_binary "$pkgname" \
+                    || echo "==> $pkgname: already up to date ($installed_ver)."
+            else
+                echo "==> $pkgname: not found in any repository, skipping."
+            fi
         fi
     fi
 }
@@ -404,17 +452,19 @@ _do_upgrade_source() {
 emerge_pkg() {
     ask=0
     bind=0
+    srcdeps=0
     pkgname=""
 
     for arg in "$@"; do
         case "$arg" in
-            --ask)  ask=1 ;;
-            --bind) bind=1 ;;
-            -ab)    ask=1; bind=1 ;;
-            -a)     ask=1 ;;
-            -b)     bind=1 ;;
-            "")     continue ;;
-            *)      pkgname="$arg" ;;
+            --ask)          ask=1 ;;
+            --bind)         bind=1 ;;
+            --source-sysdeps|-s) srcdeps=1 ;;
+            -ab)            ask=1; bind=1 ;;
+            -a)             ask=1 ;;
+            -b)             bind=1 ;;
+            "")             continue ;;
+            *)              pkgname="$arg" ;;
         esac
     done
 
@@ -455,14 +505,37 @@ emerge_pkg() {
         esac
     fi
 
-    _emerge_build "$pkgname" "$bind"
+    _emerge_build "$pkgname" "$bind" "$srcdeps"
 }
 
 # _emerge_build: trabalho real
 # $1 = pkgname  $2 = bind
 # $1 é local por chamada de função em sh — nunca é sobrescrito pela recursão
 _emerge_build() {
-    # checa makedeps
+    . "/tmp/srcinfo_$1"
+
+    # sysdeps — padrão binário, fonte se -s
+    for dep in $sysdeps; do
+        if ! is_installed "$dep"; then
+            if [ "$3" = "1" ]; then
+                # --source-sysdeps: fonte primeiro
+                if curl -fsSL "$SOURCES/$dep/SRCINFO" -o "/tmp/srcinfo_$dep" 2>/dev/null; then
+                    _emerge_build "$dep" "$2" "$3"
+                else
+                    install_pkg "$dep"
+                fi
+            else
+                # padrão: binário primeiro
+                if curl -fsSL "$REPO/$dep/PKGINFO" -o "/tmp/pkginfo_$dep" 2>/dev/null; then
+                    install_pkg "$dep"
+                else
+                    _emerge_build "$dep" "$2" "$3"
+                fi
+            fi
+        fi
+    done
+
+    # makedeps — só verifica se existe
     . "/tmp/srcinfo_$1"
     for dep in $makedeps; do
         command -v "$dep" >/dev/null 2>&1 || {
@@ -471,6 +544,7 @@ _emerge_build() {
         }
     done
 
+    # deps de runtime ...
     # instala deps de runtime — após cada dep, $1 ainda é nosso pkgname
     . "/tmp/srcinfo_$1"
     for dep in $deps; do
@@ -538,7 +612,7 @@ _emerge_build() {
 
     _bdate=$(grep "^$name|" "$LOCAL_SOURCES_INDEX" 2>/dev/null | cut -d'|' -f3)
     [ -z "$_bdate" ] && _bdate="0"
-    echo "$name=$version|$_bdate" > "$PKG_DB/$name"
+    echo "$name=$version|$_bdate|src" > "$PKG_DB/$name"
     echo "==> $name-$version built and installed sucessfully."
 }
 
@@ -584,7 +658,8 @@ case "$1" in
         echo "  search  [pkg]                         search available packages"
         echo "  update                                sync local package database"
         echo "  upgrade [-c|--compile] [pkg]          upgrade packages"
-        echo "  emerge  [-a|--ask] [-b|--bind] <pkg>  build and install from source"
+        echo "  emerge  [-a] [-b] [-s] <pkg>   build and install from source"
+        echo "          -a (--ask)  -b (--bind)  -s (--source-sysdeps)"
         echo ""
         echo "Config: $CONF_FILE"
         ;;
