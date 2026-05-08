@@ -137,11 +137,9 @@ install_pkg() {
         return 0
     fi
 
-    # verifica se existe no índice
     entry=$(pkg_info "$pkgname")
     [ -z "$entry" ] && {
         echo "ERROR: package '$pkgname' not found in database."
-        echo "       Run 'freepkg update' to sync the package list."
         exit 1
     }
 
@@ -150,7 +148,6 @@ install_pkg() {
     deps=$(pkg_deps "$pkgname")
     url=$(pkg_url "$pkgname")
 
-    # tamanho
     size=$(curl -sI "$url" | grep -i content-length | awk '{print $2}' | tr -d '\r')
     if [ -n "$size" ] && [ "$size" -gt 0 ] 2>/dev/null; then
         size_str=$(awk "BEGIN {printf \"%.2f MiB\", $size/1048576}")
@@ -173,13 +170,13 @@ install_pkg() {
         esac
     fi
 
-    # instala dependências
     for dep in $deps; do
         is_installed "$dep" || install_pkg "$dep"
     done
 
+    # usa pkgname salvo antes do loop — não é sobrescrito pois não sourcea PKGINFO
     echo "==> Downloading $pkgname-$version...  Do not turn off target!"
-    download_pkg "$url" "$PKG_CACHE/$pkgname-$version.tar.gz"
+    download_pkg "$(pkg_url "$pkgname")" "$PKG_CACHE/$pkgname-$version.tar.gz"
 
     echo "==> Verifying checksum..."
     expected_md5=$(curl -fsSL "$(pkg_md5_url "$pkgname")" | tr -d '[:space:]')
